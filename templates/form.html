@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>House Price Prediction</title>
+</head>
+<body>
+    <h2>🏠 House Price Prediction (Batch CSV Upload)</h2>
+
+    <form action="/predict_csv" method="post" enctype="multipart/form-data">
+        <p>Upload a CSV file with the same feature columns used during training.</p>
+        <input type="file" name="file" accept=".csv" required>
+        <button type="submit">Upload & Predict</button>
+    </form>
+
+    <hr>
+
+    {% if table %}
+        <h3>🔮 Predictions (showing first 10)</h3>
+        <div>{{ table | safe }}</div>
+        <p>Total Predictions: {{ total_predictions }}</p>
+    {% endif %}
+</body>
+</html>
