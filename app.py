@@ -5,7 +5,7 @@ import pandas as pd
 import joblib
 import os
 
-app = FastAPI(title="Loan Prediction")
+app = FastAPI(title="House Price  Prediction")
 MAX_ROWS = 10000  
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
