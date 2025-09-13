@@ -11,21 +11,21 @@ MAX_ROWS = 10000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Model paths
-MODEL_PATH_RENDER = "/mnt/data/loan.pkl"
-PREPROCESSOR_PATH_RENDER = "/mnt/data/preprocessor.pkl"
-MODEL_PATH_LOCAL = os.path.join(BASE_DIR, "loan.pkl")
-PREPROCESSOR_PATH_LOCAL = os.path.join(BASE_DIR, "preprocessor.pkl")
+MODEL_PATH_RENDER = "/mnt/data/house_price.pkl"
+FEATURES_PATH_RENDER = "/mnt/data/features.pkl"
+MODEL_PATH_LOCAL = os.path.join(BASE_DIR, "house_price.pkl")
+FEATURES_PATH_LOCAL = os.path.join(BASE_DIR, "features.pkl")
 
-# Load model + preprocessor
-if os.path.exists(MODEL_PATH_RENDER) and os.path.exists(PREPROCESSOR_PATH_RENDER):
-    model_path, preprocessor_path = MODEL_PATH_RENDER, PREPROCESSOR_PATH_RENDER
-elif os.path.exists(MODEL_PATH_LOCAL) and os.path.exists(PREPROCESSOR_PATH_LOCAL):
-    model_path, preprocessor_path = MODEL_PATH_LOCAL, PREPROCESSOR_PATH_LOCAL
+# Load model + features
+if os.path.exists(MODEL_PATH_RENDER) and os.path.exists(FEATURES_PATH_RENDER):
+    model_path, features_path = MODEL_PATH_RENDER, FEATURES_PATH_RENDER
+elif os.path.exists(MODEL_PATH_LOCAL) and os.path.exists(FEATURES_PATH_LOCAL):
+    model_path, features_path = MODEL_PATH_LOCAL, FEATURES_PATH_LOCAL
 else:
-    raise FileNotFoundError("Model or preprocessor not found.")
+    raise FileNotFoundError("house_price.pkl or features.pkl not found.")
 
 model = joblib.load(model_path)
-preprocessor = joblib.load(preprocessor_path)
+feature_columns = joblib.load(features_path)
 
 # Set up templates
 templates = Jinja2Templates(directory="templates")
