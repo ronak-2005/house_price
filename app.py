@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Request
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import HTMLResponse
 import pandas as pd
 import numpy as np
@@ -16,51 +16,57 @@ FEATURES_PATH_RENDER = "/mnt/data/features.pkl"
 MODEL_PATH_LOCAL = os.path.join(BASE_DIR, "house_price.pkl")
 FEATURES_PATH_LOCAL = os.path.join(BASE_DIR, "features.pkl")
 
-# Load model
+# Load model + features
 if os.path.exists(MODEL_PATH_RENDER) and os.path.exists(FEATURES_PATH_RENDER):
     model_path, features_path = MODEL_PATH_RENDER, FEATURES_PATH_RENDER
 elif os.path.exists(MODEL_PATH_LOCAL) and os.path.exists(FEATURES_PATH_LOCAL):
     model_path, features_path = MODEL_PATH_LOCAL, FEATURES_PATH_LOCAL
 else:
-    raise FileNotFoundError(
-        f"Model file not found in either Render ({MODEL_PATH_RENDER}) "
-        f"or Local ({MODEL_PATH_LOCAL})"
-    )
+    raise FileNotFoundError("Model or features.pkl not found in Render or Local paths.")
 
 model = joblib.load(model_path)
 feature_columns = joblib.load(features_path)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    """Upload form for CSV."""
-    html_content = """
+def render_page(table_html: str = "") -> str:
+    """Render upload form with optional results table."""
+    return f"""
     <html>
     <head>
         <title>House Price Predictor</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
-            form { margin: 20px auto; }
-            input[type=file] { margin-bottom: 10px; }
-            button { padding: 8px 16px; background: #007BFF; color: white; border: none; border-radius: 4px; cursor: pointer; }
-            button:hover { background: #0056b3; }
+            body {{ font-family: Arial, sans-serif; margin: 40px; text-align: center; }}
+            form {{ margin: 20px auto; }}
+            input[type=file] {{ margin-bottom: 10px; }}
+            button {{ padding: 8px 16px; background: #007BFF; color: white;
+                      border: none; border-radius: 4px; cursor: pointer; }}
+            button:hover {{ background: #0056b3; }}
+            table {{ border-collapse: collapse; width: 80%; margin: 20px auto; }}
+            th, td {{ border: 1px solid #ccc; padding: 8px 12px; text-align: center; }}
+            th {{ background-color: #f4f4f4; }}
         </style>
     </head>
     <body>
         <h2>Upload CSV for House Price Prediction</h2>
-        <form action="/predict_csv" enctype="multipart/form-data" method="post">
+        <form action="/" enctype="multipart/form-data" method="post">
             <input type="file" name="file" accept=".csv" required><br>
             <button type="submit">Predict</button>
         </form>
+        {table_html}
     </body>
     </html>
     """
-    return HTMLResponse(content=html_content)
 
 
-@app.post("/predict_csv", response_class=HTMLResponse)
-async def predict_csv(file: UploadFile = File(...)):
-    """Predict house prices from uploaded CSV and return as HTML table."""
+@app.get("/", response_class=HTMLResponse)
+async def home():
+    """Initial upload form page."""
+    return HTMLResponse(content=render_page())
+
+
+@app.post("/", response_class=HTMLResponse)
+async def predict(file: UploadFile = File(...)):
+    """Upload CSV, predict, and render results below form."""
     # Read CSV (limit rows for safety)
     df = pd.read_csv(file.file, nrows=MAX_ROWS).replace("NA", np.nan)
 
@@ -68,7 +74,7 @@ async def predict_csv(file: UploadFile = File(...)):
     if "Id" in df.columns:
         df = df.drop(columns=["Id"])
 
-    # Keep only model features
+    # Align with model features
     df = df[[col for col in df.columns if col in feature_columns]]
     for col in feature_columns:
         if col not in df.columns:
@@ -78,58 +84,29 @@ async def predict_csv(file: UploadFile = File(...)):
     # Predict
     preds = model.predict(df)
 
-    # Format results
-    results = [
-        {
-            "index": i,
-            "predicted_price": float(p),
-            "predicted_price_formatted": f"${p:,.2f}"
-        }
-        for i, p in enumerate(preds)
-    ]
+    # Build table rows
+    rows_html = ""
+    for i, p in enumerate(preds):
+        rows_html += f"""
+            <tr>
+                <td>{i}</td>
+                <td>{float(p):.2f}</td>
+                <td>${p:,.2f}</td>
+            </tr>
+        """
 
-    # Build HTML table dynamically
+    # Full table
     table_html = f"""
-    <html>
-    <head>
-        <title>House Price Predictions</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; }}
-            table {{ border-collapse: collapse; width: 80%; margin: auto; }}
-            th, td {{ border: 1px solid #ccc; padding: 8px 12px; text-align: center; }}
-            th {{ background-color: #f4f4f4; }}
-            h2 {{ text-align: center; }}
-            .back {{ display: block; text-align: center; margin-top: 20px; }}
-            .btn {{ padding: 6px 12px; background: #007BFF; color: white; border: none; border-radius: 4px; text-decoration: none; }}
-            .btn:hover {{ background: #0056b3; }}
-        </style>
-    </head>
-    <body>
         <h2>House Price Predictions ({len(df)} rows)</h2>
+        <p>⚠️ Processed only first {MAX_ROWS} rows for performance</p>
         <table>
             <thead>
                 <tr><th>Index</th><th>Predicted Price</th><th>Formatted</th></tr>
             </thead>
             <tbody>
-    """
-
-    for row in results:
-        table_html += f"""
-            <tr>
-                <td>{row['index']}</td>
-                <td>{row['predicted_price']}</td>
-                <td>{row['predicted_price_formatted']}</td>
-            </tr>
-        """
-
-    table_html += """
+                {rows_html}
             </tbody>
         </table>
-        <div class="back">
-            <a class="btn" href="/">Upload Another CSV</a>
-        </div>
-    </body>
-    </html>
     """
 
-    return HTMLResponse(content=table_html)
+    return HTMLResponse(content=render_page(table_html))
