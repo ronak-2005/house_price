@@ -1,11 +1,11 @@
 from fastapi import FastAPI, UploadFile, File, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import pandas as pd
 import joblib
 import os
 
-app = FastAPI(title="House Price  Prediction")
+app = FastAPI(title="House Price Prediction")
 MAX_ROWS = 10000  
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,36 +27,30 @@ else:
 model = joblib.load(model_path)
 feature_columns = joblib.load(features_path)
 
-# Set up templates
+# Setup templates
 templates = Jinja2Templates(directory="templates")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    # render your form_house.html from templates folder
-    return templates.TemplateResponse("form_house.html", {"request": request})
+    return templates.TemplateResponse("form_house.html", {"request": request, "predictions": None})
 
-@app.post("/predict_csv")
-async def predict_csv(file: UploadFile = File(...)):
+
+@app.post("/predict_csv", response_class=HTMLResponse)
+async def predict_csv(request: Request, file: UploadFile = File(...)):
     df = pd.read_csv(file.file, nrows=MAX_ROWS)
-    df_test = df.drop(columns=["loan_status"], errors="ignore")
+    df_test = df[feature_columns]  # Ensure correct order of features
 
-    # Preprocess and predict
-    X = preprocessor.transform(df_test)
-    preds = model.predict(X)
+    preds = model.predict(df_test)
 
-    # Probabilities
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X)
-    else:
-        probs = [[1 if p == 1 else 0, 1 if p == 0 else 0] for p in preds]
-
+    # Prepare top 10 results
     results = []
-    for i, (pred, prob) in enumerate(zip(preds, probs)):
+    for i, pred in enumerate(preds):
         results.append({
-            "Index": int(i),
-            "Prediction": "Approved" if pred == 1 else "Rejected",
-            "Approved Probability": round(float(prob[1]), 4),
-            "Rejected Probability": round(float(prob[0]), 4),
+            "index": i,
+            "Predicted Price": round(float(pred), 2)
         })
 
-    return JSONResponse(content={"predictions": results})
+    top_10 = results[:10]
+
+    return templates.TemplateResponse("form_house.html", {"request": request, "predictions": top_10})
