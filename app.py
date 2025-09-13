@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import numpy as np
 import joblib
@@ -22,52 +23,25 @@ if os.path.exists(MODEL_PATH_RENDER) and os.path.exists(FEATURES_PATH_RENDER):
 elif os.path.exists(MODEL_PATH_LOCAL) and os.path.exists(FEATURES_PATH_LOCAL):
     model_path, features_path = MODEL_PATH_LOCAL, FEATURES_PATH_LOCAL
 else:
-    raise FileNotFoundError("Model or features.pkl not found in Render or Local paths.")
+    raise FileNotFoundError("Model or features.pkl not found.")
 
 model = joblib.load(model_path)
 feature_columns = joblib.load(features_path)
 
-
-def render_page(table_html: str = "") -> str:
-    """Render upload form with optional results table."""
-    return f"""
-    <html>
-    <head>
-        <title>House Price Predictor</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 40px; text-align: center; }}
-            form {{ margin: 20px auto; }}
-            input[type=file] {{ margin-bottom: 10px; }}
-            button {{ padding: 8px 16px; background: #007BFF; color: white;
-                      border: none; border-radius: 4px; cursor: pointer; }}
-            button:hover {{ background: #0056b3; }}
-            table {{ border-collapse: collapse; width: 80%; margin: 20px auto; }}
-            th, td {{ border: 1px solid #ccc; padding: 8px 12px; text-align: center; }}
-            th {{ background-color: #f4f4f4; }}
-        </style>
-    </head>
-    <body>
-        <h2>Upload CSV for House Price Prediction</h2>
-        <form action="/" enctype="multipart/form-data" method="post">
-            <input type="file" name="file" accept=".csv" required><br>
-            <button type="submit">Predict</button>
-        </form>
-        {table_html}
-    </body>
-    </html>
-    """
+# Serve static frontend (modern UI with Tailwind)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    """Initial upload form page."""
-    return HTMLResponse(content=render_page())
+    """Serve modern index.html frontend."""
+    with open(os.path.join(BASE_DIR, "static/index.html"), "r") as f:
+        return HTMLResponse(content=f.read())
 
 
-@app.post("/", response_class=HTMLResponse)
-async def predict(file: UploadFile = File(...)):
-    """Upload CSV, predict, and render results below form."""
-    # Read CSV (limit rows for safety)
+@app.post("/predict_csv")
+async def predict_csv(file: UploadFile = File(...)):
+    """Handle CSV upload and return predictions as JSON."""
     df = pd.read_csv(file.file, nrows=MAX_ROWS).replace("NA", np.nan)
 
     # Drop Id column if present
@@ -84,29 +58,12 @@ async def predict(file: UploadFile = File(...)):
     # Predict
     preds = model.predict(df)
 
-    # Build table rows
-    rows_html = ""
+    results = []
     for i, p in enumerate(preds):
-        rows_html += f"""
-            <tr>
-                <td>{i}</td>
-                <td>{float(p):.2f}</td>
-                <td>${p:,.2f}</td>
-            </tr>
-        """
+        results.append({
+            "Index": int(i),
+            "Predicted Price": round(float(p), 2),
+            "Formatted": f"${p:,.2f}"
+        })
 
-    # Full table
-    table_html = f"""
-        <h2>House Price Predictions ({len(df)} rows)</h2>
-        <p>⚠️ Processed only first {MAX_ROWS} rows for performance</p>
-        <table>
-            <thead>
-                <tr><th>Index</th><th>Predicted Price</th><th>Formatted</th></tr>
-            </thead>
-            <tbody>
-                {rows_html}
-            </tbody>
-        </table>
-    """
-
-    return HTMLResponse(content=render_page(table_html))
+    return JSONResponse(content={"predictions": results})
